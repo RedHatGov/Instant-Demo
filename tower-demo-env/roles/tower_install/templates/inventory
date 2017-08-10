@@ -1,0 +1,25 @@
+[tower]
+localhost ansible_connection=local
+
+[database]
+
+[all:vars]
+{% if towerpass is defined %}
+admin_password={{ towerpass }}
+{% endif %}
+
+pg_host=''
+pg_port=''
+
+pg_database='awx'
+pg_username='awx'
+pg_password='Redhat1!'
+
+rabbitmq_port=5672
+rabbitmq_vhost=tower
+rabbitmq_username=tower
+rabbitmq_password='Redhat1!'
+rabbitmq_cookie=cookiemonster
+
+# Needs to be true for fqdns and ip addresses
+rabbitmq_use_long_name=false

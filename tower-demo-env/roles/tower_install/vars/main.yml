@@ -1,0 +1,5 @@
+---
+# vars file for tower_install
+admin_pass: Redhat1!
+pg_pass: Redhat1!
+rabbit_pass: Redhat1!

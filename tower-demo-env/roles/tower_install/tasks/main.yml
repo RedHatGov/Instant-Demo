@@ -1,0 +1,28 @@
+---
+#tasks file for tower_install
+- name: download latest tower package
+  get_url:
+    url: "{{ tower_url }}"
+    dest: /tmp
+
+- name: uncompress/untar tower package
+  unarchive:
+    src: /tmp/{{ tower_compressed }}
+    dest: /tmp
+
+- name: find the name of the uncompressed directory
+  find:
+    paths: /tmp
+    file_type: directory
+    patterns: "ansible-tower-setup-bundle-*"
+  register: find_result
+
+- name: Deploy inventory file
+  template:
+    src: inventory.j2
+    dest: "{{ item.path }}/inventory"
+  with_items:
+    "{{ find_result.files }}"
+
+- name: Run the Ansible Tower installer
+  command: "{{ item.path}}/setup.sh"

@@ -1,0 +1,4 @@
+---
+# defaults file for tower_install
+tower_compressed: ansible-tower-setup-bundle-latest.el7.tar.gz
+tower_url: https://releases.ansible.com/ansible-tower/setup-bundle/ansible-tower-setup-bundle-latest.el7.tar.gz

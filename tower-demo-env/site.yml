@@ -1,0 +1,9 @@
+---
+- name: Install and Configure Ansible Tower for a demo environment
+  hosts: tower
+  become: true
+
+  roles:
+    - {role: configure_vm, tags: ['configure_vm']}
+    - {role: tower_install, tags: ['tower_install']}
+    - {role: tower_deploy, tags: ['tower_deploy']}

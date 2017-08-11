@@ -1,0 +1,7 @@
+---
+# defaults file for createVM, can be overridden
+
+######################################################################=== vm.xml
+vm_memoryKiB:     2097152
+vm_vcpus:         2
+vm_qemu_img_path: /tmp

@@ -1,0 +1,224 @@
+---
+- name: Start and Enable firewalld
+  systemd: name=firewalld state=started enabled=yes
+  tags: satellite
+
+# Put all of your with_items as a list variable in a vars file like so:
+#
+#firewalld_services:
+#  - RH-Satellite-6
+#  - dns
+#  - dhcp
+#  - tftp
+#  - http
+#  - https
+# potentially having different groups of lists:
+#firewalld_satellite_services
+#firewalld_tower_services
+#firewalld_idm_services
+
+#Then, you can just call it like so:
+
+#with_items:
+#  - "{{ firewalld_services }}"
+
+# Reload your firewall within the same task.  Add  immediate: yes as one of the options and it will reload.
+#Add your port enablement to that same firewalld task.
+
+- name: Configure firewalld
+  firewalld:
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+  with_items:
+    - RH-Satellite-6
+    - dns
+    - dhcp
+    - tftp
+    - http
+    - https
+  tags: satellite
+
+- name: Add 5647 to firewalld
+  firewalld:
+    port: 5647/tcp
+    permanent: true
+    state: enabled
+  tags: satellite
+
+- name: Reload firewalld
+  systemd:
+    name: firewalld
+    state: reloaded
+  tags: satellite
+
+- name: Add mappings to /etc/hosts, This needs to call the hostname instead of having it hard coded
+  blockinfile:
+    path: /etc/hosts
+    block: |
+      {{ item.ip }} {{ item.name }}
+    marker: "# {mark} ANSIBLE MANAGED BLOCK {{ item.name }}"
+  with_items:
+    - { name: satellite.demo.com, ip: 192.168.126.2 }
+    - { name: tower.demo.com, ip: 192.168.126.3 }
+  tags: satellite
+
+- name: Register to RHN and attach Satellite SKU, (change to pool_ids when Ansible 2.4 is released)
+  redhat_subscription:
+    state: present
+    username: "{{ rhn_username }}"
+    password: "{{ rhn_password }}"
+# need ansible2.4 for pool_ids to work
+    pool: '^(Red Hat Satellite Employee Subscription)$'
+  tags: satellite
+
+- name: Disable All Repositories
+  raw: subscription-manager repos --disable "*"
+  tags: satellite
+
+- name: Enable Specific Repositories
+  raw: subscription-manager repos --enable rhel-7-server-rpms --enable rhel-server-rhscl-7-rpms --enable rhel-7-server-satellite-6.2-rpms
+  tags: satellite
+#https://github.com/samdoran/ansible-role-redhat-subscription
+- name: clean out yum metadata
+  command: yum clean all
+  tags: satellite
+
+- name: Install Satellite RPMs
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - satellite
+    - puppet-foreman_scap_client
+  tags: satellite
+
+- name: Download foreman.yml for Hammer configs
+  get_url:
+    url: http://192.168.126.1/foreman.yml
+    dest: /etc/hammer/cli.modules.d/
+    mode: 0755
+  tags: satellite
+
+- name: Run satellite-installer (look in github for examples... this can all be done through variables, and done without the raw module)
+  raw: satellite-installer -v --scenario satellite --foreman-initial-organization "RedHat" --foreman-initial-location "RDU" --foreman-admin-password redhat --foreman-proxy-dns true --foreman-proxy-dns-interface ens3 --foreman-proxy-dns-zone demo.com --foreman-proxy-dns-forwarders 192.168.126.1 --foreman-proxy-dns-reverse 126.168.192.in-addr.arpa --foreman-proxy-dhcp true --foreman-proxy-dhcp-interface ens3 --foreman-proxy-dhcp-range "192.168.126.100 192.168.126.150" --foreman-proxy-dhcp-gateway 192.168.126.1 --foreman-proxy-dhcp-nameservers 192.168.126.2 --foreman-proxy-tftp true --foreman-proxy-tftp-servername $(hostname) --capsule-puppet true --foreman-proxy-puppetca true --enable-foreman-plugin-openscap
+  tags: satellite
+
+- name: Update resolv.conf to have Satellite point to itself for DNS resolution
+  lineinfile:
+    path: /etc/resolv.conf
+    regexp: 'nameserver'
+    line: 'nameserver 192.168.126.2'
+    state: present
+    backrefs: yes
+  tags: satellite
+
+- name: Download manifest from Laptop
+  get_url:
+    url: http://192.168.126.1/Satellite_61_Latest.zip
+    dest: /root/Satellite_61_Latest.zip
+  tags: satellite
+
+- name: Upload Manifest
+  command: hammer subscription upload --organization "RedHat" --file /root/Satellite_61_Latest.zip
+  tags: satellite
+
+- name: Enable RHEL 7 Server
+  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7 Server Extras
+  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Enterprise Linux 7 Server - Extras (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7.3 Kickstart
+  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7.3' --name 'Red Hat Enterprise Linux 7 Server (Kickstart)'
+  tags: satellite
+
+- name: Enable Satellite Tools 6.2 (for RHEL 7 Server)
+  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Satellite Tools 6.2 (for RHEL 7 Server) (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7 Server Optional
+  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server - Optional (RPMs)'
+  tags: satellite
+
+- name: Create Daily Sync Plan
+  raw: hammer sync-plan create --name 'Daily Sync' --description 'Daily Synchronization Plan' --organization "RedHat" --interval daily --sync-date $(date +"%Y-%m-%d")" 00:00:00" --enabled yes
+  tags: satellite
+
+- name: Add RHEL product to sync plan
+  command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux Server' --organization "RedHat" --sync-plan 'Daily Sync'
+  tags: satellite
+
+- name: Create Development Environment
+  command: hammer lifecycle-environment create --organization "RedHat" --description 'Development' --name 'Development' --label development --prior Library
+  tags: satellite
+
+- name: Create Acceptance Environment
+  command: hammer lifecycle-environment create --organization "RedHat" --description 'Acceptance' --name 'Acceptance' --label acceptance --prior 'Development'
+  tags: satellite
+
+- name: Create Production Environment
+  command: hammer lifecycle-environment create --organization "RedHat" --description 'Production' --name 'Production' --label production --prior 'Acceptance'
+  tags: satellite
+
+- name: Upload SCAP contents
+  command: foreman-rake foreman_openscap:bulk_upload:default
+  tags: satellite
+
+- name: Create content view
+  command: hammer content-view create --organization "RedHat" --name 'RHEL7_Base' --label rhel7_base --description 'Core Build for RHEL 7'
+  tags: satellite
+
+- name: Add repositories to content views
+  command: hammer content-view add-repository --organization "RedHat" --name 'RHEL7_Base' --product 'Red Hat Enterprise Linux Server' --repository '{{ item }}'
+  with_items:
+    - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
+    - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.3"
+    - "Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server"
+  tags: satellite
+
+#figure out how to do "lazy sync" process so we don't have to wait for each of these to complete...is this needed or am i misunderstanding how the "lazy sync" is supposed to work?
+#hammer repository synchronize --organization "$ORG" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.2'
+#hammer repository synchronize --organization "$ORG" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64'
+#hammer repository synchronize --organization "$ORG" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64'
+#hammer repository synchronize --organization "$ORG" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server'
+#hammer repository synchronize --organization "$ORG" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server'
+#hammer content-view publish --organization "$ORG" --name RHEL7_Base --description 'Initial Publishing'
+#hammer content-view version promote --organization "$ORG" --content-view RHEL7_Base --to-lifecycle-environment Development
+#hammer content-view version promote --organization "$ORG" --content-view RHEL7_Base --to-lifecycle-environment Acceptance
+#hammer content-view version promote --organization "$ORG" --content-view RHEL7_Base --to-lifecycle-environment Production
+#hammer activation-key create --organization "$ORG" --description 'Basic RHEL7 Key for Registering to Development' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Development --lifecycle-environment 'Development'
+#hammer activation-key create --organization "$ORG" --description 'Basic RHEL7 Key for Registering to Acceptance' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Acceptance --lifecycle-environment 'Acceptance'
+#hammer activation-key create --organization "$ORG" --description 'Basic RHEL7 Key for Registering to Production' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Production --lifecycle-environment 'Production'
+
+#Remaining tasks:
+#1. add subscription to activation key
+#$ hammer subscription list --organization “$ORG”
+#$ hammer activation-key add-subscription --name _akReg_To_Dev_EL7_ --subscription-id 8 --organization "$ORG"
+#$ hammer activation-key content-override --name _akReg_To_Dev_EL7_ --organization "$ORG" --content-label rhel-7-server-satellite-tools-6.2-rpms --value 1
+#2. update domain:
+#DOMAIN="demo.com'
+#SATELLITE=$(hostname)
+#hammer domain update --name $DOMAIN --organizations "$ORG" --dns $SATELLITE --locations 'RDU'
+#3. create hostgroup
+#hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view RHEL7_Base --domain $DOMAIN --lifecycle-environment Development --name RHEL7_Dev_Servers --organization "$ORG" --puppet-ca-proxy satellite.$DOMAIN --puppet-proxy $SATELLITE --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --puppet-classes "motd" --medium "$ORG"/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_2
+#hammer hostgroup set-parameter --hostgroup "RHEL7_Crash_Servers" --name "kt_activation_keys" --value ak-Reg_To_Development
+#4. create compute resource for LibVirt
+#hammer compute-resource create --description 'LibVirt Compute Resource' --locations RDU --name Libvirt_CR --organizations "$ORG" --url 'qemu+tcp://192.168.126.1/system/' --provider libvirt --set-console-password 0
+#5. During provisioning, a system is automatically updated. This prevents us from demoing Insights and patching
+#/opt/theforeman/tfm/root/usr/share/gems/gems/katello-3.0.0.125/app/views/foreman/unattended/kickstart-katello.erb
+#comment out 'yum -t -y -e 0 update'
+#/opt/theforeman/tfm/root/usr/share/gems/gems/foreman_theme_satellite-0.1.42/app/views/foreman/unattended/kickstart-katello.erb
+#comment out 'yum -t -y -e 0 update'
+#/opt/theforeman/tfm/root/usr/share/gems/gems/foreman_theme_satellite-0.1.31/app/views/foreman/unattended/kickstart-katello.erb
+#/opt/theforeman/tfm/root/usr/share/gems/gems/katello-3.0.0.81/app/views/foreman/unattended/kickstart-katello.erb
+#6. Instead of repo sync, try prepopulating content with content ISOs
+#https://access.redhat.com/articles/1531833   - use content ISOs to prepopulate initial content.
+#7. download http://192.168.126.2/pub/katello-server-ca.crt and import that in your browser. (for vnc/spice console viewing)
+#8. On the Satellite Server, distribute the key to the host.
+# ssh-copy-id -i ~foreman-proxy/.ssh/id_rsa_foreman_proxy.pub
+#root@auth01.example.com

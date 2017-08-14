@@ -1,0 +1,8 @@
+---
+- hosts: all
+  name: Configure Environment
+  roles:
+    - satellite-install
+    - tower-install
+
+#Need to include extra-vars.yml for configuration

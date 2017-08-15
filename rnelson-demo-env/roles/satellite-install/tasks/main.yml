@@ -135,7 +135,7 @@
   command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Enterprise Linux 7 Server - Extras (RPMs)'
   tags: satellite
 
-- name: Enable RHEL 7.3 Kickstart
+- name: Enable RHEL 7.3 Kickstart (this is so we show Insights after we disable the 'yum update' in the provisioning kickstart config)
   command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7.3' --name 'Red Hat Enterprise Linux 7 Server (Kickstart)'
   tags: satellite
 
@@ -185,6 +185,16 @@
   command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux High Availability for RHEL Server' --organization "RedHat" --sync-plan 'Daily Sync'
   tags: satellite
 
+
+#figure out how to do "lazy sync" process so we don't have to wait for each of these to complete...is this needed or am i misunderstanding how the "lazy sync" is supposed to work?
+#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.2'
+#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64'
+#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64'
+#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server'
+#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server'
+#hammer repository synchronize --organization "RedHat" --product 'Extra Packages for Enterprise Linux' --name 'Extra Packages for Enterprise Linux'
+
+
 - name: Create Development Environment
   command: hammer lifecycle-environment create --organization "RedHat" --description 'Development' --name 'Development' --label development --prior Library
   tags: satellite
@@ -199,6 +209,21 @@
 
 - name: Upload SCAP contents
   command: foreman-rake foreman_openscap:bulk_upload:default
+  tags: satellite
+
+- name: Create LibVirt Compute Resource
+  command: hammer compute-resource create --description 'LibVirt Compute Resource' --locations RDU --name Libvirt_CR --organizations "RedHat" --url 'qemu+tcp://192.168.126.1/system/' --provider libvirt --set-console-password 0
+  tags: satellite
+
+##Need##
+#modify the 3 default Compute profiles
+
+- name: Update Domain Settings for "demo.com"
+  command: hammer domain update --name demo.com --organizations "RedHat" --dns satellite.demo.com --locations 'RDU'
+  tags: satellite
+
+- name: Create VLAN_126 subnet
+  command: hammer subnet create --name vlan_126 --dhcp-id 1 --dns-id 1 --tftp-id 1 --organizations RedHat --domains demo.com --locations 'RDU' --network 192.168.126.0 --mask 255.255.255.0 --gateway 192.168.126.1 --from 192.168.126.150 --to 192.168.126.200
   tags: satellite
 
 - name: Create RHEL 7 Base Content View
@@ -230,47 +255,6 @@
 - name: Add High Availability Repository to it's Content View
   command: hammer content-view add-repository --organization "RedHat" --name 'High_Availability' --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --repository 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server'
   tags: satellite
-
-##Consider adding Content View Filters to show a 30-day patching policy
-
-##Need##
-#update all references from content views to the correct composite content view
-
-- name: Create Development-RHEL Composite Content View (RHEL7_Base + High_Availability + EPEL)
-  command: hammer content-view create --composite --organization "RedHat" --name 'Development-RHEL' --label composite_rhel7_epel --description 'Combination of RHEL7_Base and EPEL'
-  tags: satellite
-
-
-## need to add content views into composite content views
-
-- name: Create Acceptance-RHEL Composite Content View (RHEL7_Base + High Availability)
-  command: hammer content-view create --composite --organization "RedHat" --name 'Acceptance-RHEL' --label composite_rhel7_high_availability --description 'Combination of RHEL7_Base and High Availability'
-  tags: satellite
-
-- name: Create LibVirt Compute Resource
-  command: hammer compute-resource create --description 'LibVirt Compute Resource' --locations RDU --name Libvirt_CR --organizations "RedHat" --url 'qemu+tcp://192.168.126.1/system/' --provider libvirt --set-console-password 0
-  tags: satellite
-
-##Need##
-#modify the 3 default Compute profiles
-
-- name: Update Domain Settings for "demo.com"
-  command: hammer domain update --name demo.com --organizations "RedHat" --dns satellite.demo.com --locations 'RDU'
-  tags: satellite
-
-- name: Create VLAN_126 subnet
-  command: hammer subnet create --name vlan_126 --dhcp-id 1 --dns-id 1 --tftp-id 1 --organizations RedHat --domains demo.com --locations 'RDU' --network 192.168.126.0 --mask 255.255.255.0 --gateway 192.168.126.1 --from 192.168.126.150 --to 192.168.126.200
-  tags: satellite
-
-
-#figure out how to do "lazy sync" process so we don't have to wait for each of these to complete...is this needed or am i misunderstanding how the "lazy sync" is supposed to work?
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.2'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server'
-#hammer repository synchronize --organization "RedHat" --product 'Extra Packages for Enterprise Linux' --name 'Extra Packages for Enterprise Linux'
-
 
 - name: Publish Initial RHEL 7 Base Content View
   command: hammer content-view publish --organization "RedHat" --name RHEL7_Base --description 'Initial Publishing'
@@ -304,17 +288,44 @@
     - Production
   tags: satellite
 
-- name: Create Activation Key for Development
+- name: Create Development-RHEL Composite Content View (RHEL7_Base + High_Availability + EPEL)
+  command: hammer content-view create --composite --organization "RedHat" --name 'Development-RHEL' --label composite_rhel7_epel --description 'Combination of RHEL7_Base and EPEL'
+  tags: satellite
+
+- name: Create Acceptance-RHEL Composite Content View (RHEL7_Base + High Availability)
+  command: hammer content-view create --composite --organization "RedHat" --name 'Acceptance-RHEL' --label composite_rhel7_high_availability --description 'Combination of RHEL7_Base and High Availability'
+  tags: satellite
+
+## need to add content views into composite content views
+#Find the Content View ID of the specific version of the Content View to add:
+# hammer content-view version list --organization "RedHat" --content-view RHEL7_Base
+#From the CLI, add a Content View to a composite Content View:
+# hammer content-view update --organization "RedHat" --content-view "Acceptance-RHEL" --component-ids 2 --component-ids 4
+
+
+
+##add Content View Filters to show a monthly patching policy... which really means... create a monthly patching policy from end-to-end
+#https://theforeman.org/plugins/katello/nightly/user_guide/content_views/index.html , check for hammer example on filter creation
+
+##Need##
+#update all references from content views to the correct composite content view
+
+- name: Create RHEL Activation Key for Development
   command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Development Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Development --lifecycle-environment 'Development'
   tags: satellite
 
-- name: Create Activation Key for Acceptance
+- name: Create RHEL Activation Key for Acceptance
   command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Acceptance Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Acceptance --lifecycle-environment 'Acceptance'
   tags: satellite
 
-- name: Create Activation Key for Production
+- name: Create RHEL Activation Key for Production
   command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Production Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Production --lifecycle-environment 'Production'
   tags: satellite
+
+
+##Need##
+# add SUSE or Solaris Product to show Foreman managing these.
+
 
 ##Need##
 # add subscriptions to activation keys and enable the correct channels for each environment

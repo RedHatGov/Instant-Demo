@@ -5,8 +5,6 @@
 
 ####look to break the playbook down into separate blocks of tasks... system prep, repo creation (EPEL, RHEL, HA), and more..
 
-
-
 # Put all of your with_items as a list variable in a vars file like so:
 #
 #firewalld_services:
@@ -84,6 +82,7 @@
   raw: subscription-manager repos --enable rhel-7-server-rpms --enable rhel-server-rhscl-7-rpms --enable rhel-7-server-satellite-6.2-rpms
   tags: satellite
 #https://github.com/samdoran/ansible-role-redhat-subscription
+
 - name: clean out yum metadata
   command: yum clean all
   tags: satellite
@@ -125,6 +124,10 @@
 
 - name: Upload Manifest
   command: hammer subscription upload --organization "RedHat" --file /root/Satellite_61_Latest.zip
+  tags: satellite
+
+- name: Enable "Lazy Sync" on-demand policy for all Repositories
+  command: hammer settings set --name default_download_policy --value on_demand
   tags: satellite
 
 - name: Enable RHEL 7 Server
@@ -185,15 +188,23 @@
   command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux High Availability for RHEL Server' --organization "RedHat" --sync-plan 'Daily Sync'
   tags: satellite
 
+- name: Sync Red Hat base repositories in the background (test)
+  command: hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  '{{ item }}' &
+  with_items:
+    - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
+    - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.3"
+    - "Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server"
+  tags: satellite
 
-#figure out how to do "lazy sync" process so we don't have to wait for each of these to complete...is this needed or am i misunderstanding how the "lazy sync" is supposed to work?
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.2'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server'
-#hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  'Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server'
-#hammer repository synchronize --organization "RedHat" --product 'Extra Packages for Enterprise Linux' --name 'Extra Packages for Enterprise Linux'
+- name: Sync Red Hat High Availability repositories in the background (test)
+  command: hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --name 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server' &
+  tags: satellite
 
+- name: Sync EPEL repositories in the background (test)
+  command: hammer repository synchronize --organization "RedHat" --product 'Extra Packages for Enterprise Linux' --name 'Extra Packages for Enterprise Linux' &
+  tags: satellite
 
 - name: Create Development Environment
   command: hammer lifecycle-environment create --organization "RedHat" --description 'Development' --name 'Development' --label development --prior Library
@@ -303,7 +314,6 @@
 # hammer content-view update --organization "RedHat" --content-view "Acceptance-RHEL" --component-ids 2 --component-ids 4
 
 
-
 ##add Content View Filters to show a monthly patching policy... which really means... create a monthly patching policy from end-to-end
 #https://theforeman.org/plugins/katello/nightly/user_guide/content_views/index.html , check for hammer example on filter creation
 
@@ -328,7 +338,7 @@
 
 
 ##Need##
-# add subscriptions to activation keys and enable the correct channels for each environment
+# add subscriptions to activation keys and enable the correct channels for each environment... look at using --output to be able to parse by field.
 #$ hammer subscription list --organization “RedHat”
 #$ hammer activation-key add-subscription --name _akReg_To_Dev_EL7_ --subscription-id 8 --organization "$ORG"
 #$ hammer activation-key content-override --name _akReg_To_Dev_EL7_ --organization "$ORG" --content-label rhel-7-server-satellite-tools-6.2-rpms --value 1

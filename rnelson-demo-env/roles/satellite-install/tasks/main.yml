@@ -5,53 +5,13 @@
 
 ####look to break the playbook down into separate blocks of tasks... system prep, repo creation (EPEL, RHEL, HA), and more..
 
-# Put all of your with_items as a list variable in a vars file like so:
-#
-#firewalld_services:
-#  - RH-Satellite-6
-#  - dns
-#  - dhcp
-#  - tftp
-#  - http
-#  - https
-# potentially having different groups of lists:
-#firewalld_satellite_services
-#firewalld_tower_services
-#firewalld_idm_services
-
-#Then, you can just call it like so:
-
-#with_items:
-#  - "{{ firewalld_services }}"
-
-# Reload your firewall within the same task.  Add  immediate: yes as one of the options and it will reload.
-#Add your port enablement to that same firewalld task.
-
 - name: Configure firewalld
   firewalld:
-    service: "{{ item }}"
+    port: "{{ item }}"
     permanent: true
+    immediate: yes
     state: enabled
-  with_items:
-    - RH-Satellite-6
-    - dns
-    - dhcp
-    - tftp
-    - http
-    - https
-  tags: satellite
-
-- name: Add 5647 to firewalld
-  firewalld:
-    port: 5647/tcp
-    permanent: true
-    state: enabled
-  tags: satellite
-
-- name: Reload firewalld
-  systemd:
-    name: firewalld
-    state: reloaded
+  with_items: "{{ satellite_ports }}"
   tags: satellite
 
 - name: Add mappings to /etc/hosts, This needs to call the hostname instead of having it hard coded
@@ -78,10 +38,10 @@
   raw: subscription-manager repos --disable "*"
   tags: satellite
 
-- name: Enable Specific Repositories
-  raw: subscription-manager repos --enable rhel-7-server-rpms --enable rhel-server-rhscl-7-rpms --enable rhel-7-server-satellite-6.2-rpms
+- name: Enable Satellite repositories
+  command: /usr/sbin/subscription-manager repos --enable="{{item}}"
+  with_items: "{{ satellite_repos }}"
   tags: satellite
-#https://github.com/samdoran/ansible-role-redhat-subscription
 
 - name: clean out yum metadata
   command: yum clean all
@@ -96,15 +56,15 @@
     - puppet-foreman_scap_client
   tags: satellite
 
-- name: Download foreman.yml for Hammer configs
+- name: Download foreman.yml from Laptop for Hammer configs
   get_url:
     url: http://192.168.126.1/foreman.yml
     dest: /etc/hammer/cli.modules.d/
     mode: 0755
   tags: satellite
 
-- name: Run satellite-installer (look in github for examples... this can all be done through variables, and done without the raw module)
-  raw: satellite-installer -v --scenario satellite --foreman-initial-organization "RedHat" --foreman-initial-location "RDU" --foreman-admin-password redhat --foreman-proxy-dns true --foreman-proxy-dns-interface ens3 --foreman-proxy-dns-zone demo.com --foreman-proxy-dns-forwarders 192.168.126.1 --foreman-proxy-dns-reverse 126.168.192.in-addr.arpa --foreman-proxy-dhcp true --foreman-proxy-dhcp-interface ens3 --foreman-proxy-dhcp-range "192.168.126.100 192.168.126.150" --foreman-proxy-dhcp-gateway 192.168.126.1 --foreman-proxy-dhcp-nameservers 192.168.126.2 --foreman-proxy-tftp true --foreman-proxy-tftp-servername $(hostname) --capsule-puppet true --foreman-proxy-puppetca true --enable-foreman-plugin-openscap
+- name: Run satellite-installer
+  raw: satellite-installer -v --scenario satellite --foreman-initial-organization "{{satellite_organization}}" --foreman-initial-location "{{satellite_location}}" --foreman-admin-password "{{satellite_admin_password}}" --foreman-proxy-dns true --foreman-proxy-dns-interface ens3 --foreman-proxy-dns-zone "{{satellite_domain}}" --foreman-proxy-dns-forwarders 192.168.126.1 --foreman-proxy-dns-reverse 126.168.192.in-addr.arpa --foreman-proxy-dhcp true --foreman-proxy-dhcp-interface ens3 --foreman-proxy-dhcp-range "192.168.126.100 192.168.126.150" --foreman-proxy-dhcp-gateway 192.168.126.1 --foreman-proxy-dhcp-nameservers 192.168.126.2 --foreman-proxy-tftp true --foreman-proxy-tftp-servername $(hostname) --capsule-puppet true --foreman-proxy-puppetca true --enable-foreman-plugin-openscap
   tags: satellite
 
 - name: Update resolv.conf to have Satellite point to itself for DNS resolution
@@ -123,7 +83,7 @@
   tags: satellite
 
 - name: Upload Manifest
-  command: hammer subscription upload --organization "RedHat" --file /root/Satellite_61_Latest.zip
+  command: hammer subscription upload --organization "{{satellite_organization}}" --file /root/Satellite_61_Latest.zip
   tags: satellite
 
 - name: Enable "Lazy Sync" on-demand policy for all Repositories
@@ -131,27 +91,27 @@
   tags: satellite
 
 - name: Enable RHEL 7 Server
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server (RPMs)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server (RPMs)'
   tags: satellite
 
 - name: Enable RHEL 7 Server Extras
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Enterprise Linux 7 Server - Extras (RPMs)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Enterprise Linux 7 Server - Extras (RPMs)'
   tags: satellite
 
 - name: Enable RHEL 7.3 Kickstart (this is so we show Insights after we disable the 'yum update' in the provisioning kickstart config)
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7.3' --name 'Red Hat Enterprise Linux 7 Server (Kickstart)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7.3' --name 'Red Hat Enterprise Linux 7 Server (Kickstart)'
   tags: satellite
 
 - name: Enable Satellite Tools 6.2 (for RHEL 7 Server)
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Satellite Tools 6.2 (for RHEL 7 Server) (RPMs)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Satellite Tools 6.2 (for RHEL 7 Server) (RPMs)'
   tags: satellite
 
 - name: Enable RHEL 7 Server Optional
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server - Optional (RPMs)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server - Optional (RPMs)'
   tags: satellite
 
 - name: Enable RHEL 7 High Availability
-  command: hammer repository-set enable --organization "RedHat" --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux High Availability (for RHEL 7 Server) (RPMs)'
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux High Availability (for RHEL 7 Server) (RPMs)'
   tags: satellite
 
 - name: Download EPEL GPG Key from upstream
@@ -161,35 +121,35 @@
   tags: satellite
 
 - name: Create EPEL GPG Key
-  command: hammer gpg create --key /root/RPM-GPG-KEY-EPEL-7  --name 'GPG-EPEL-7' --organization "RedHat"
+  command: hammer gpg create --key /root/RPM-GPG-KEY-EPEL-7  --name 'GPG-EPEL-7' --organization "{{satellite_organization}}"
   tags: satellite
 
 - name: Create EPEL Product
-  command: hammer product create --name='Extra Packages for Enterprise Linux' --organization "RedHat" --description 'Extra Packages for Enterprise Linux'
+  command: hammer product create --name='Extra Packages for Enterprise Linux' --organization "{{satellite_organization}}" --description 'Extra Packages for Enterprise Linux'
   tags: satellite
 
 - name: Create EPEL Repository
-  command: hammer repository create --name='EPEL 7 - x86_64' --organization "RedHat" --product='Extra Packages for Enterprise Linux' --content-type='yum' --publish-via-http=true --url=http://dl.fedoraproject.org/pub/epel/7/x86_64/ --checksum-type=sha256 --gpg-key=GPG-EPEL-7
+  command: hammer repository create --name='EPEL 7 - x86_64' --organization "{{satellite_organization}}" --product='Extra Packages for Enterprise Linux' --content-type='yum' --publish-via-http=true --url=http://dl.fedoraproject.org/pub/epel/7/x86_64/ --checksum-type=sha256 --gpg-key=GPG-EPEL-7
   tags: satellite
 
 - name: Create Daily Sync Plan
-  raw: hammer sync-plan create --name 'Daily Sync' --description 'Daily Synchronization Plan' --organization "RedHat" --interval daily --sync-date $(date +"%Y-%m-%d")" 00:00:00" --enabled yes
+  raw: hammer sync-plan create --name 'Daily Sync' --description 'Daily Synchronization Plan' --organization "{{satellite_organization}}" --interval daily --sync-date $(date +"%Y-%m-%d")" 00:00:00" --enabled yes
   tags: satellite
 
 - name: Add RHEL Product to Sync Plan
-  command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux Server' --organization "RedHat" --sync-plan 'Daily Sync'
+  command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux Server' --organization "{{satellite_organization}}" --sync-plan 'Daily Sync'
   tags: satellite
 
 - name: Add EPEL Product to Sync Plan
-  command: hammer product set-sync-plan --name 'Extra Packages for Enterprise Linux' --organization "RedHat" --sync-plan 'Daily Sync'
+  command: hammer product set-sync-plan --name 'Extra Packages for Enterprise Linux' --organization "{{satellite_organization}}" --sync-plan 'Daily Sync'
   tags: satellite
 
 - name: Add High Availability Product to Sync Plan
-  command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux High Availability for RHEL Server' --organization "RedHat" --sync-plan 'Daily Sync'
+  command: hammer product set-sync-plan --name 'Red Hat Enterprise Linux High Availability for RHEL Server' --organization "{{satellite_organization}}" --sync-plan 'Daily Sync'
   tags: satellite
 
-- name: Sync Red Hat base repositories in the background (test)
-  command: hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux Server'  --name  '{{ item }}' &
+- name: Sync Red Hat base repositories in the background
+  command: hammer repository synchronize --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --name '{{ item }}' --async
   with_items:
     - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
     - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
@@ -199,58 +159,59 @@
   tags: satellite
 
 - name: Sync Red Hat High Availability repositories in the background (test)
-  command: hammer repository synchronize --organization "RedHat" --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --name 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server' &
+  command: hammer repository synchronize --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --name 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server' --async
   tags: satellite
 
 - name: Sync EPEL repositories in the background (test)
-  command: hammer repository synchronize --organization "RedHat" --product 'Extra Packages for Enterprise Linux' --name 'Extra Packages for Enterprise Linux' &
+  command: hammer repository synchronize --organization "{{satellite_organization}}" --product 'Extra Packages for Enterprise Linux' --name 'EPEL 7 - x86_64' --async
   tags: satellite
 
 - name: Create Development Environment
-  command: hammer lifecycle-environment create --organization "RedHat" --description 'Development' --name 'Development' --label development --prior Library
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Development' --name 'Development' --label development --prior Library
   tags: satellite
 
 - name: Create Acceptance Environment
-  command: hammer lifecycle-environment create --organization "RedHat" --description 'Acceptance' --name 'Acceptance' --label acceptance --prior 'Development'
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Acceptance' --name 'Acceptance' --label acceptance --prior 'Development'
   tags: satellite
 
 - name: Create Production Environment
-  command: hammer lifecycle-environment create --organization "RedHat" --description 'Production' --name 'Production' --label production --prior 'Acceptance'
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Production' --name 'Production' --label production --prior 'Acceptance'
   tags: satellite
 
-- name: Upload SCAP contents
-  command: foreman-rake foreman_openscap:bulk_upload:default
-  tags: satellite
+# planned on moving to CloudForms for OpenSCAP compliance
+#- name: Upload SCAP contents
+#  command: foreman-rake foreman_openscap:bulk_upload:default
+#  tags: satellite
 
 - name: Create LibVirt Compute Resource
-  command: hammer compute-resource create --description 'LibVirt Compute Resource' --locations RDU --name Libvirt_CR --organizations "RedHat" --url 'qemu+tcp://192.168.126.1/system/' --provider libvirt --set-console-password 0
+  command: hammer compute-resource create --description 'LibVirt Compute Resource' --locations "{{satellite_location}}" --name Libvirt_CR --organizations "{{satellite_organization}}" --url 'qemu+tcp://192.168.126.1/system/' --provider libvirt --set-console-password 0
   tags: satellite
 
 ##Need##
 #modify the 3 default Compute profiles
 
-- name: Update Domain Settings for "demo.com"
-  command: hammer domain update --name demo.com --organizations "RedHat" --dns satellite.demo.com --locations 'RDU'
+- name: Update Domain Settings
+  command: hammer domain update --name "{{satellite_domain}}" --organizations "{{satellite_organization}}" --dns satellite.demo.com --locations "{{satellite_location}}"
   tags: satellite
 
 - name: Create VLAN_126 subnet
-  command: hammer subnet create --name vlan_126 --dhcp-id 1 --dns-id 1 --tftp-id 1 --organizations RedHat --domains demo.com --locations 'RDU' --network 192.168.126.0 --mask 255.255.255.0 --gateway 192.168.126.1 --from 192.168.126.150 --to 192.168.126.200
+  command: hammer subnet create --name vlan_126 --dhcp-id 1 --dns-id 1 --tftp-id 1 --organizations "{{satellite_organization}}" --domains "{{satellite_domain}}" --locations "{{satellite_location}}" --network 192.168.126.0 --mask 255.255.255.0 --gateway 192.168.126.1 --from 192.168.126.150 --to 192.168.126.200
   tags: satellite
 
 - name: Create RHEL 7 Base Content View
-  command: hammer content-view create --organization "RedHat" --name 'RHEL7_Base' --label rhel7_base --description 'Core Build for RHEL 7'
+  command: hammer content-view create --organization "{{satellite_organization}}" --name 'RHEL7_Base' --label rhel7_base --description 'Core Build for RHEL 7'
   tags: satellite
 
 - name: Create EPEL Content View
-  command: hammer content-view create --organization "RedHat" --name 'EPEL' --label epel --description 'Contains only Extra Packages for Enterprise Linux repository'
+  command: hammer content-view create --organization "{{satellite_organization}}" --name 'EPEL' --label epel --description 'Contains only Extra Packages for Enterprise Linux repository'
   tags: satellite
 
 - name: Create High Availability Content View
-  command: hammer content-view create --organization "RedHat" --name 'High_Availability' --label high_availability --description 'Contains only High Availability repository'
+  command: hammer content-view create --organization "{{satellite_organization}}" --name 'High_Availability' --label high_availability --description 'Contains only High Availability repository'
   tags: satellite
 
 - name: Add RHEL Repositories to RHEL 7 Base Content View
-  command: hammer content-view add-repository --organization "RedHat" --name 'RHEL7_Base' --product 'Red Hat Enterprise Linux Server' --repository '{{ item }}'
+  command: hammer content-view add-repository --organization "{{satellite_organization}}" --name 'RHEL7_Base' --product 'Red Hat Enterprise Linux Server' --repository '{{ item }}'
   with_items:
     - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
     - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
@@ -260,19 +221,19 @@
   tags: satellite
 
 - name: Add EPEL Repository to EPEL Content View
-  command: hammer content-view add-repository --organization "RedHat" --name 'EPEL' --product 'Extra Packages for Enterprise Linux' --repository 'EPEL 7 - x86_64'
+  command: hammer content-view add-repository --organization "{{satellite_organization}}" --name 'EPEL' --product 'Extra Packages for Enterprise Linux' --repository 'EPEL 7 - x86_64'
   tags: satellite
 
 - name: Add High Availability Repository to it's Content View
-  command: hammer content-view add-repository --organization "RedHat" --name 'High_Availability' --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --repository 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server'
+  command: hammer content-view add-repository --organization "{{satellite_organization}}" --name 'High_Availability' --product 'Red Hat Enterprise Linux High Availability for RHEL Server' --repository 'Red Hat Enterprise Linux High Availability for RHEL 7 Server RPMs x86_64 7Server'
   tags: satellite
 
 - name: Publish Initial RHEL 7 Base Content View
-  command: hammer content-view publish --organization "RedHat" --name RHEL7_Base --description 'Initial Publishing'
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name RHEL7_Base --description 'Initial Publishing'
   tags: satellite
 
 - name: Promote Initial RHEL 7 Base Content View to All Environments
-  command: hammer content-view version promote --organization "RedHat" --content-view RHEL7_Base --to-lifecycle-environment '{{ item }}'
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view RHEL7_Base --to-lifecycle-environment '{{ item }}'
   with_items:
     - Development
     - Acceptance
@@ -280,19 +241,19 @@
   tags: satellite
 
 - name: Publish Initial EPEL Content View
-  command: hammer content-view publish --organization "RedHat" --name EPEL --description 'Initial Publishing'
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name EPEL --description 'Initial Publishing'
   tags: satellite
 
 - name: Promote Initial EPEL Content View to only Development Environment
-  command: hammer content-view version promote --organization "RedHat" --content-view EPEL --to-lifecycle-environment Development
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view EPEL --to-lifecycle-environment Development
   tags: satellite
 
 - name: Publish Initial High Availability Content View
-  command: hammer content-view publish --organization "RedHat" --name High_Availability --description 'Initial Publishing'
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name High_Availability --description 'Initial Publishing'
   tags: satellite
 
 - name: Promote Initial High Availability Content View to Development, Acceptance, and Production
-  command: hammer content-view version promote --organization "RedHat" --content-view High_Availability --to-lifecycle-environment '{{ item }}'
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view High_Availability --to-lifecycle-environment '{{ item }}'
   with_items:
     - Development
     - Acceptance
@@ -300,37 +261,53 @@
   tags: satellite
 
 - name: Create Development-RHEL Composite Content View (RHEL7_Base + High_Availability + EPEL)
-  command: hammer content-view create --composite --organization "RedHat" --name 'Development-RHEL' --label composite_rhel7_epel --description 'Combination of RHEL7_Base and EPEL'
+  command: hammer content-view create --composite --organization "{{satellite_organization}}" --name 'Development-RHEL' --label composite_rhel7_epel --description 'Combination of RHEL7_Base and EPEL'
   tags: satellite
 
 - name: Create Acceptance-RHEL Composite Content View (RHEL7_Base + High Availability)
-  command: hammer content-view create --composite --organization "RedHat" --name 'Acceptance-RHEL' --label composite_rhel7_high_availability --description 'Combination of RHEL7_Base and High Availability'
+  command: hammer content-view create --composite --organization "{{satellite_organization}}" --name 'Acceptance-RHEL' --label composite_rhel7_high_availability --description 'Combination of RHEL7_Base and High Availability'
   tags: satellite
 
-## need to add content views into composite content views
-#Find the Content View ID of the specific version of the Content View to add:
-# hammer content-view version list --organization "RedHat" --content-view RHEL7_Base
-#From the CLI, add a Content View to a composite Content View:
-# hammer content-view update --organization "RedHat" --content-view "Acceptance-RHEL" --component-ids 2 --component-ids 4
+- name: Add content views to composite content view for Development-RHEL
+  command: hammer content-view update --organization "{{satellite_organization}}" --name "Development-RHEL" --component-ids 2,3,4
+  tags: satellite
+
+- name: Add content views to composite content view for Acceptance-RHEL
+  command: hammer content-view update --organization "{{satellite_organization}}" --name "Acceptance-RHEL" --component-ids 2,4
+  tags: satellite
+
+- name: Publish composite content view Development-RHEL
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name Development-RHEL --description 'Initial Publishing'
+  tags: satellite
+
+- name: Promote composite content view Development-RHEL
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view Development-RHEL --to-lifecycle-environment Development
+  tags: satellite
+
+- name: Publish composite content view Acceptance-RHEL
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name Acceptance-RHEL --description 'Initial Publishing'
+  tags: satellite
+
+- name: Promote composite content view Acceptance-RHEL
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view Acceptance-RHEL --to-lifecycle-environment 'Acceptance'
+  tags: satellite
 
 
 ##add Content View Filters to show a monthly patching policy... which really means... create a monthly patching policy from end-to-end
 #https://theforeman.org/plugins/katello/nightly/user_guide/content_views/index.html , check for hammer example on filter creation
 
-##Need##
-#update all references from content views to the correct composite content view
 
 - name: Create RHEL Activation Key for Development
-  command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Development Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Development --lifecycle-environment 'Development'
+  command: hammer activation-key create --organization "{{satellite_organization}}" --description 'Activation Key for Development Environment for RHEL 7 servers' --content-view 'Development-RHEL' --unlimited-hosts --name ak-Reg_To_Development --lifecycle-environment 'Development'
   tags: satellite
 
 - name: Create RHEL Activation Key for Acceptance
-  command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Acceptance Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Acceptance --lifecycle-environment 'Acceptance'
+  command: hammer activation-key create --organization "{{satellite_organization}}" --description 'Activation Key for Acceptance Environment for RHEL 7 servers' --content-view 'Acceptance-RHEL' --unlimited-hosts --name ak-Reg_To_Acceptance --lifecycle-environment 'Acceptance'
   tags: satellite
 
-- name: Create RHEL Activation Key for Production
-  command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Production Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Production --lifecycle-environment 'Production'
-  tags: satellite
+#- name: Create RHEL Activation Key for Production
+#  command: hammer activation-key create --organization "RedHat" --description 'Activation Key for Production Environment' --content-view 'RHEL7_Base' --unlimited-hosts --name ak-Reg_To_Production --lifecycle-environment 'Production'
+#  tags: satellite
 
 
 ##Need##
@@ -344,7 +321,7 @@
 #$ hammer activation-key content-override --name _akReg_To_Dev_EL7_ --organization "$ORG" --content-label rhel-7-server-satellite-tools-6.2-rpms --value 1
 
 - name: Create 'Kickstart default' Host Group for Development. Need to change this to a group of kickstart profiles (idm, gluster, ceph, openshift, ha, etc)
-  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view RHEL7_Base --domain demo.com --lifecycle-environment Development --name RHEL7_Development_Servers --organization "RedHat" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
+  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view Development-RHEL --domain "{{satellite_domain}}" --lifecycle-environment Development --name RHEL7_Development_Servers --organization "{{satellite_organization}}" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
   tags: satellite
 
 - name: Set Host Group "RHEL 7 Development Servers" activation keys to "ak-Reg_To_Development"
@@ -352,20 +329,20 @@
   tags: satellite
 
 - name: Create 'Kickstart default' Host Group for Acceptance. Need to change this to a group of kickstart profiles (idm, gluster, ceph, openshift, ha, etc)
-  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view RHEL7_Base --domain demo.com --lifecycle-environment Acceptance --name RHEL7_Acceptance_Servers --organization "RedHat" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
+  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view Acceptance-RHEL --domain "{{satellite_domain}}" --lifecycle-environment Acceptance --name RHEL7_Acceptance_Servers --organization "{{satellite_organization}}" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
   tags: satellite
 
-- name: Set Host Group "RHEL 7 Acceptance Servers" activation keys to "ak-Reg_To_Development"
-  command: hammer hostgroup set-parameter --hostgroup "RHEL7_Acceptance_Servers" --name "kt_activation_keys" --value ak-Reg_To_Acceptance
-  tags: satellite
+#- name: Set Host Group "RHEL 7 Acceptance Servers" activation keys to "ak-Reg_To_Acceptance"
+  #command: hammer hostgroup set-parameter --hostgroup "RHEL7_Acceptance_Servers" --name "kt_activation_keys" --value ak-Reg_To_Acceptance
+#  tags: satellite
 
-- name: Create 'Kickstart default' Host Group for Production. Need to change this to a group of kickstart profiles (idm, gluster, ceph, openshift, ha, etc)
-  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view RHEL7_Base --domain demo.com --lifecycle-environment Production --name RHEL7_Production_Servers --organization "RedHat" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
-  tags: satellite
+#- name: Create 'Kickstart default' Host Group for Production. Need to change this to a group of kickstart profiles (idm, gluster, ceph, openshift, ha, etc)
+#  command: hammer hostgroup create --architecture x86_64 --content-source-id 1 --content-view RHEL7_Base --domain demo.com --lifecycle-environment Production --name RHEL7_Production_Servers --organization "RedHat" --puppet-ca-proxy satellite.demo.com --puppet-proxy satellite.demo.com --subnet vlan_126 --partition-table 'Kickstart default' --operatingsystem 'RedHat 7.3' --medium RedHat/Library/Red_Hat_Server/Red_Hat_Enterprise_Linux_7_Server_Kickstart_x86_64_7_3
+#  tags: satellite
 
-- name: Set Host Group "RHEL 7 Production Servers" activation keys to "ak-Reg_To_Production"
-  command: hammer hostgroup set-parameter --hostgroup "RHEL7_Production_Servers" --name "kt_activation_keys" --value ak-Reg_To_Production
-  tags: satellite
+#- name: Set Host Group "RHEL 7 Production Servers" activation keys to "ak-Reg_To_Production"
+#  command: hammer hostgroup set-parameter --hostgroup "RHEL7_Production_Servers" --name "kt_activation_keys" --value ak-Reg_To_Production
+#  tags: satellite
 
 #During provisioning, a system is automatically updated. This prevents us from demoing Insights and patching
 #/opt/theforeman/tfm/root/usr/share/gems/gems/katello-3.0.0.125/app/views/foreman/unattended/kickstart-katello.erb
@@ -376,9 +353,6 @@
 #/opt/theforeman/tfm/root/usr/share/gems/gems/katello-3.0.0.81/app/views/foreman/unattended/kickstart-katello.erb
 #you may need to run the following after making these edits:
 #foreman-rake db:seed
-
-#Instead of repo sync, try prepopulating content with content ISOs? Could it be faster than lazy sync or going over internet?
-#https://access.redhat.com/articles/1531833   - use content ISOs to prepopulate initial content.
 
 
 #set up ssh keys

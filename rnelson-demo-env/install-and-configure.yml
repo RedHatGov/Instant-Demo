@@ -1,0 +1,9 @@
+---
+- hosts: all
+  name: Install and Configure Environment
+  roles:
+    - install-satellite
+    - install-tower
+    - install-idm
+#    - laptop-configure
+# change roles to "install-*" for easier reading

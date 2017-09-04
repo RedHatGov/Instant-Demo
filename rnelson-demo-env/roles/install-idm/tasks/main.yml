@@ -1,0 +1,49 @@
+---
+- name: Start and Enable firewalld
+  systemd: name=firewalld state=started enabled=yes
+  tags: idm
+
+- name: Configure firewalld
+  firewalld:
+    port: "{{ item }}"
+    permanent: true
+    immediate: yes
+    state: enabled
+  with_items: "{{ idm_ports }}"
+  tags: idm
+
+- name: Download /etc/hosts file from Laptop
+  get_url:
+    url: http://192.168.126.1/hosts
+    dest: /etc/hosts
+    mode: 0644
+  tags: idm
+
+- name: Register to RHN and attach general Server SKU through Activation Key (change activation key, CP currently not populating subscriptions)
+  command: subscription-manager register --username={{ rhn_username }} --password={{ rhn_password }}
+#  redhat_subscription:
+#    state: present
+#    activationkey: "{{ satellite_activation_key }}"
+#    org_id: "{{ rhn_org_id }}"
+  tags: idm
+
+- name: Attach Employee SKU (remove once CP allows creation of activation key)
+  command: subscription-manager attach --pool=8a85f9833e1404a9013e3cddf99305e6
+  tags: idm
+
+- name: Disable All Repositories
+  raw: subscription-manager repos --disable "*"
+  tags: idm
+
+- name: Enable RHEL Server Repository
+  command: /usr/sbin/subscription-manager repos --enable=rhel-7-server-rpms
+  tags: idm
+
+- name: Install IdM RPMs
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - ipa-server
+    - ipa-server-dns
+  tags: idm

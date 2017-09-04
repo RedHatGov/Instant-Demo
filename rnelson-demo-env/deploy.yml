@@ -2,5 +2,6 @@
 - hosts: all
   name: Deploy image based off of clone
   roles:
-    - satellite-deploy-vm
-    - tower-deploy-vm
+    - deploy-satellite
+    - deploy-tower
+    - deploy-idm

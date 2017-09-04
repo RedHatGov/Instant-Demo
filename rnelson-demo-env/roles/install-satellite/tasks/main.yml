@@ -1,0 +1,276 @@
+---
+- name: Check to see if Satellite is answering
+  uri:
+      url: "https://{{ satellite_hostname }}/api/organizations"
+      user: "{{ satellite_admin_username }}"
+      password: "{{ satellite_admin_password }}"
+      force_basic_auth: yes
+  register: satellite_is_installed
+  ignore_errors: yes
+  tags: satellite
+
+- name: Set the 'satellite_is_installed' variable
+  set_fact:
+    satellite_is_installed: "{{ False if satellite_is_installed.failed | default(False) or satellite_is_installed.status != 200 else True }}"
+  tags: satellite
+
+- name: Start and Enable firewalld
+  systemd: name=firewalld state=started enabled=yes
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Configure firewalld
+  firewalld:
+    port: "{{ item }}"
+    permanent: true
+    immediate: yes
+    state: enabled
+  with_items: "{{ satellite_ports }}"
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Download /etc/hosts file from Laptop
+  get_url:
+    url: http://192.168.126.1/hosts
+    dest: /etc/hosts
+    mode: 0644
+  when: not satellite_is_installed
+  tags: satellite
+
+#- name: Register to RHN and attach Satellite SKU, (change to pool_ids when Ansible 2.4 is released)
+#  redhat_subscription:
+#    state: present
+#    username: "{{ rhn_username }}"
+#    password: "{{ rhn_password }}"
+# need ansible2.4 for pool_ids to work
+# need to manually delete the system in customer portal... find out a way to do the --force option? Currently --force not supported in redhat_subscription
+#    pool: '^(Red Hat Satellite Employee Subscription)$'
+#  when: not satellite_is_installed
+#  tags: satellite
+
+- name: Register to RHN and attach Satellite SKU through Activation Key
+  redhat_subscription:
+    state: present
+    activationkey: "{{ satellite_activation_key }}"
+    org_id: "{{ rhn_org_id }}"
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Disable All Repositories
+  raw: subscription-manager repos --disable "*"
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Enable Satellite repositories
+  command: /usr/sbin/subscription-manager repos --enable="{{item}}"
+  with_items: "{{ satellite_repos }}"
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Install Satellite RPMs
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - satellite
+    - ipa-client
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Download foreman.yml from Laptop for Hammer configs
+  get_url:
+    url: http://192.168.126.1/foreman.yml
+    dest: /etc/hammer/cli.modules.d/
+    mode: 0755
+  when: not satellite_is_installed
+  tags: satellite
+
+- name: Run satellite-installer
+  shell: satellite-installer -v --scenario satellite --foreman-initial-organization "{{satellite_organization}}" --foreman-initial-location "{{satellite_location}}" --foreman-admin-password "{{satellite_admin_password}}"
+  when: not satellite_is_installed
+  tags: satellite
+
+# Added this comment back for when IdM is added as DNS. Will need to integrate DNS?
+#- name: Run satellite-installer
+#  shell: satellite-installer -v --scenario satellite --foreman-initial-organization "{{satellite_organization}}" --foreman-initial-location "{{satellite_location}}" --foreman-admin-password "{{satellite_admin_password}}" --foreman-proxy-dns true --foreman-proxy-dns-interface ens3 --foreman-proxy-dns-zone "{{satellite_domain}}" --foreman-proxy-dns-forwarders 192.168.126.1 --foreman-proxy-dns-reverse 126.168.192.in-addr.arpa --foreman-proxy-dhcp true --foreman-proxy-dhcp-interface ens3 --foreman-proxy-dhcp-range "192.168.126.150 192.168.126.200" --foreman-proxy-dhcp-gateway 192.168.126.1 --foreman-proxy-dhcp-nameservers 192.168.126.2 --foreman-proxy-tftp true --foreman-proxy-tftp-servername $(hostname) --capsule-puppet true --foreman-proxy-puppetca true --enable-foreman-plugin-openscap
+#  when: not satellite_is_installed
+#  tags: satellite
+
+#This will change to IdM once we configure that role
+#- name: Update resolv.conf to have Satellite point to itself for DNS resolution
+#  lineinfile:
+#    path: /etc/resolv.conf
+#    regexp: 'nameserver'
+#    line: 'nameserver 192.168.126.2'
+#    state: present
+#    backrefs: yes
+#  when: not satellite_is_installed
+#  tags: satellite
+
+- name: Download manifest from Laptop
+  get_url:
+    url: http://192.168.126.1/Satellite_61_Latest.zip
+    dest: /root/Satellite_61_Latest.zip
+  tags: satellite
+
+- name: Upload Manifest
+  command: hammer subscription upload --organization "{{satellite_organization}}" --file /root/Satellite_61_Latest.zip
+  tags: satellite
+
+- name: Enable "Lazy Sync" on-demand policy for all Repositories
+  command: hammer settings set --name default_download_policy --value on_demand
+  tags: satellite
+
+- name: Enable RHEL 7 Server
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7 Server Extras
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Enterprise Linux 7 Server - Extras (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7.4 Kickstart (this is so we show Insights after we disable the 'yum update' in the provisioning kickstart config)
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7.4' --name 'Red Hat Enterprise Linux 7 Server (Kickstart)'
+  tags: satellite
+
+- name: Enable Satellite Tools 6.2 (for RHEL 7 Server)
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --name 'Red Hat Satellite Tools 6.2 (for RHEL 7 Server) (RPMs)'
+  tags: satellite
+
+- name: Enable RHEL 7 Server Optional
+  command: hammer repository-set enable --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --basearch='x86_64' --releasever='7Server' --name 'Red Hat Enterprise Linux 7 Server - Optional (RPMs)'
+  tags: satellite
+
+- name: Download EPEL GPG Key from upstream
+  get_url:
+    url: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-7
+    dest: /root/RPM-GPG-KEY-EPEL-7
+  tags: satellite
+
+- name: Create EPEL GPG Key
+  command: hammer gpg create --key /root/RPM-GPG-KEY-EPEL-7  --name 'GPG-EPEL-7' --organization "{{satellite_organization}}"
+  tags: satellite
+
+- name: Create EPEL Product
+  command: hammer product create --name='Extra Packages for Enterprise Linux' --organization "{{satellite_organization}}" --description 'Extra Packages for Enterprise Linux'
+  tags: satellite
+
+- name: Create EPEL Repository
+  command: hammer repository create --name='EPEL 7 - x86_64' --organization "{{satellite_organization}}" --product='Extra Packages for Enterprise Linux' --content-type='yum' --publish-via-http=true --url=http://dl.fedoraproject.org/pub/epel/7/x86_64/ --checksum-type=sha256 --gpg-key=GPG-EPEL-7
+  tags: satellite
+
+- name: Create Daily Sync Plan
+  raw: hammer sync-plan create --name 'Daily Sync' --description 'Daily Synchronization Plan' --organization "{{satellite_organization}}" --interval daily --sync-date $(date +"%Y-%m-%d")" 00:00:00" --enabled yes
+  tags: satellite
+
+- name: Add RHEL Product to Sync Plan
+  command: hammer product set-sync-plan --name "{{ item }}" --organization "{{satellite_organization}}" --sync-plan 'Daily Sync'
+  with_items:
+    - "Red Hat Enterprise Linux Server"
+    - "Extra Packages for Enterprise Linux"
+  tags: satellite
+
+- name: Sync Red Hat base repositories (lazy sync not functioning through hammer)
+  command: hammer repository synchronize --organization "{{satellite_organization}}" --product 'Red Hat Enterprise Linux Server' --name '{{ item }}'
+  with_items:
+    - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
+    - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.4"
+    - "Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server"
+  tags: satellite
+
+- name: Sync EPEL repositories (lazy sync not functioning through hammer)
+  command: hammer repository synchronize --organization "{{satellite_organization}}" --product 'Extra Packages for Enterprise Linux' --name 'EPEL 7 - x86_64'
+  tags: satellite
+
+- name: Create Development Environment
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Development' --name 'Development' --label development --prior Library
+  tags: satellite
+
+- name: Create Acceptance Environment
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Acceptance' --name 'Acceptance' --label acceptance --prior 'Development'
+  tags: satellite
+
+- name: Create Production Environment
+  command: hammer lifecycle-environment create --organization "{{satellite_organization}}" --description 'Production' --name 'Production' --label production --prior 'Acceptance'
+  tags: satellite
+
+- name: Create RHEL 7 Base Content View
+  command: hammer content-view create --organization "{{satellite_organization}}" --name 'RHEL7_Base' --label rhel7_base --description 'Core Build for RHEL 7'
+  tags: satellite
+
+- name: Create EPEL Content View
+  command: hammer content-view create --organization "{{satellite_organization}}" --name 'EPEL' --label epel --description 'Contains only Extra Packages for Enterprise Linux repository'
+  tags: satellite
+
+- name: Add RHEL Repositories to RHEL 7 Base Content View
+  command: hammer content-view add-repository --organization "{{satellite_organization}}" --name 'RHEL7_Base' --product 'Red Hat Enterprise Linux Server' --repository '{{ item }}'
+  with_items:
+    - "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server"
+    - "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server Kickstart x86_64 7.4"
+    - "Red Hat Satellite Tools 6.2 for RHEL 7 Server RPMs x86_64"
+    - "Red Hat Enterprise Linux 7 Server - Optional RPMs x86_64 7Server"
+  tags: satellite
+
+- name: Add EPEL Repository to EPEL Content View
+  command: hammer content-view add-repository --organization "{{satellite_organization}}" --name 'EPEL' --product 'Extra Packages for Enterprise Linux' --repository 'EPEL 7 - x86_64'
+  tags: satellite
+
+- name: Publish Initial RHEL 7 Base Content View
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name RHEL7_Base --description 'Initial Publishing'
+  tags: satellite
+
+#- name: Promote Initial RHEL 7 Base Content View to All Environments
+#  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view RHEL7_Base --to-lifecycle-environment '{{ item }}'
+#  with_items:
+#    - Development
+#    - Acceptance
+#    - Production
+#  tags: satellite
+
+- name: Publish Initial EPEL Content View
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name EPEL --description 'Initial Publishing'
+  tags: satellite
+
+#- name: Promote Initial EPEL Content View to only Development Environment
+#  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view EPEL --to-lifecycle-environment Development
+#  tags: satellite
+
+- name: Create Development-RHEL Composite Content View (RHEL7_Base + EPEL)
+  command: hammer content-view create --composite --organization "{{satellite_organization}}" --name 'Development-RHEL' --label composite_D_rhel7_epel --description 'Combination of RHEL7_Base and EPEL for Development'
+  tags: satellite
+
+- name: Add content views to composite content view for Development-RHEL
+  command: hammer content-view update --organization "{{satellite_organization}}" --name "Development-RHEL" --component-ids 2,3
+  tags: satellite
+
+- name: Publish composite content view Development-RHEL
+  command: hammer content-view publish --organization "{{satellite_organization}}" --name Development-RHEL --description 'Initial Publishing'
+  tags: satellite
+
+- name: Promote composite content view Development-RHEL
+  command: hammer content-view version promote --organization "{{satellite_organization}}" --content-view Development-RHEL --to-lifecycle-environment Development
+  tags: satellite
+
+##add Content View Filters to show a monthly patching policy... which really means... create a monthly patching policy from end-to-end
+#https://theforeman.org/plugins/katello/nightly/user_guide/content_views/index.html , check for hammer example on filter creation
+
+- name: Create RHEL Activation Key for Development
+  command: hammer activation-key create --organization "{{satellite_organization}}" --description 'Activation Key for Development Environment for RHEL 7 servers' --content-view 'Development-RHEL' --unlimited-hosts --name ak-Reg_To_Development --lifecycle-environment 'Development'
+  tags: satellite
+
+##Need##
+# add subscriptions to activation keys and enable the correct channels for each environment... look at using --output to be able to parse by field.
+#$ hammer subscription list --organization “RedHat”
+#$ hammer activation-key add-subscription --name _akReg_To_Dev_EL7_ --subscription-id 8 --organization "$ORG"
+#$ hammer activation-key content-override --name _akReg_To_Dev_EL7_ --organization "$ORG" --content-label rhel-7-server-satellite-tools-6.2-rpms --value 1
+
+- name: Update Domain Settings
+  command: hammer domain update --name "{{satellite_domain}}" --organizations "{{satellite_organization}}" --locations "{{satellite_location}}"
+  tags: satellite
+
+##Need##
+# add Fedora / CentOS product to show Foreman managing these.
+#set up ssh keys

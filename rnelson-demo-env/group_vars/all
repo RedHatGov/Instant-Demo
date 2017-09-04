@@ -1,11 +1,11 @@
 ---
-#Satellite variables
+#Satellite Configure section#
 satellite_admin_username: admin
 satellite_admin_password: redhat
 satellite_organization: RedHat
 satellite_location: RDU
 satellite_domain: demo.com
-
+satellite_hostname: satellite.demo.com
 
 satellite_repos:
   - rhel-7-server-rpms
@@ -15,6 +15,45 @@ satellite_repos:
 satellite_ports:
   - '80/tcp'   # HTTP
   - '443/tcp'  # HTTPS
+  - '5646/tcp' # qpid/Katello
+  - '5647/tcp' # qpid/Katello
+  - '5671/tcp' # amqp
+  - '5674/tcp' # amqp
+  - '8140/tcp' # Puppet
+  - '9090/tcp' # Foreman Smart Proxy / Capsule
+  - '53/tcp'   # DNS
+  - '53/udp'   # DNS
+  - '67/udp'   # DHCP
+  - '68/udp'   # DHCP
+  - '69/udp'   # TFTP
+  - '389/tcp'  # LDAP
+  - '636/tcp'  # LDAPS
+  - '88/tcp'   # Kerberos
+  - '464/tcp'  # Kerberos
+  - '123/udp'  # NTP
+
+
+#Laptop Configure section#
+
+laptop_ports:
+  - '80/tcp'   # HTTP
+  - '443/tcp'  # HTTPS
+  - '22/tcp'   # SSH
+
+
+#Tower Configure section
+
+
+
+#IdM Configure Section
+idm_ports:
+  - '80/tcp'   # HTTP
+  - '443/tcp'  # HTTPS
+  - '389/tcp'  # LDAP
+  - '636/tcp'  # LDAPS
+  - '88/tcp'   # Kerberos
+  - '464/tcp'  # Kerberos
+  - '123/udp'  # NTP
   - '5646/tcp' # qpid/Katello
   - '5647/tcp' # qpid/Katello
   - '5671/tcp' # amqp

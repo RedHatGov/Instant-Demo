@@ -1,0 +1,8 @@
+---
+- name: Provision libvirt VMs
+  hosts: localhost
+  connection: local 
+  become: true
+
+  roles:
+    - ansible-prvsn-libvirt-vm

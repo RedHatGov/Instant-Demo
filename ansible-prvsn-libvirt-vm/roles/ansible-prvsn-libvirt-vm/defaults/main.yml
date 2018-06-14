@@ -1,0 +1,11 @@
+kvm_host: 192.168.122.1
+guest:
+  - name: examplevm
+    cpu: 1
+    mem: 512
+    iso:
+    os:
+      type: Linux
+      variant: rhel7
+    disk:
+      size: 9

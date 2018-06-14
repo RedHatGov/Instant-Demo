@@ -1,0 +1,54 @@
+#version=DEVEL
+# System authorization information
+auth --enableshadow --passalgo=sha512
+repo --name="Server-HighAvailability" --baseurl=file:///run/install/repo/addons/HighAvailability
+repo --name="Server-ResilientStorage" --baseurl=file:///run/install/repo/addons/ResilientStorage
+# Use CDROM installation media
+cdrom
+text
+# Run the Setup Agent on first boot
+firstboot --enable
+ignoredisk --only-use=vda
+# Keyboard layouts
+keyboard --vckeymap=us --xlayouts='us'
+# System language
+lang en_US.UTF-8
+
+# Network information
+#network  --bootproto=static --device=eth0 --gateway=192.168.122.1 --ip=192.168.122.243 --nameserver=192.168.122.1 --netmask=255.255.255.0 --ipv6=auto --activate
+network --bootproto=dhcp --device=eth0 --ipv6=auto --activate
+network --hostname={{ item.name }}
+
+# Root password
+rootpw --iscrypted $6$Padt/fVCoDX8mHi9$q58Sqb4cOPS28M7jHUuflDybjaCr2II1xGfCrUwYuT5bETdGCfdHnRlQcwUVhqVpTBNpILkxSGHXYyDCYgQvD1
+# Create user account
+user --name=ansibleops --groups=wheel --iscrypted --password=$6$Padt/fVCoDX8mHi9$q58Sqb4cOPS28M7jHUuflDybjaCr2II1xGfCrUwYuT5bETdGCfdHnRlQcwUVhqVpTBNpILkxSGHXYyDCYgQvD1
+# System services
+services --enabled="chronyd"
+# System timezone
+timezone America/New_York --isUtc
+# System bootloader configuration
+bootloader --append=" crashkernel=auto" --location=mbr --boot-drive=vda
+autopart --type=lvm
+# Partition clearing information
+clearpart --none --initlabel
+
+%packages
+@^minimal
+@core
+chrony
+kexec-tools
+
+%end
+
+%addon com_redhat_kdump --enable --reserve-mb='auto'
+
+%end
+
+%anaconda
+pwpolicy root --minlen=6 --minquality=1 --notstrict --nochanges --notempty
+pwpolicy user --minlen=6 --minquality=1 --notstrict --nochanges --emptyok
+pwpolicy luks --minlen=6 --minquality=1 --notstrict --nochanges --notempty
+%end
+
+reboot

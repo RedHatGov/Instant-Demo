@@ -1,0 +1,64 @@
+---
+# tasks file for ansible-prvsn-libvirt-vm
+- name: start libvirtd
+  service: name=libvirtd state=started enabled=yes
+  register: libvirtd
+
+- name: wait for libvirtd to get up
+  pause: seconds=30
+  when: libvirtd.changed
+
+- name: get list of vms
+  virt: command=list_vms
+  register: virt_vms
+
+- name: Install the kickstart file
+  template:
+    src: templates/default.ks.j2
+    dest: /var/www/html/{{item.name}}.ks
+    owner: apache
+    group: apache
+    mode: 0644
+  with_items:
+    - "{{ guest }}"
+
+- name: create vm
+  command: >
+    virt-install
+    -n {{item.name}}
+    -r {{ item.mem }}
+    --vcpus {{ item.cpu }}
+    --location {{ item.iso }}
+    --os-type {{ item.os.type }}
+    --os-variant {{ item.os.variant }}
+    --network network=default
+    --disk size={{item.disk.size}}
+    --noautoconsole
+    --nographics
+    --extra-args="ks=http://{{kvm_host}}/{{item.name}}.ks console=tty0 console=ttyS0,115200n8"
+  with_items: "{{ guest }}"
+
+- name:  Wait for new VM to complete building
+  action: virt name={{item.name}} command=status
+  register: vmstate
+  until: vmstate.status.find("shutdown") != -1
+  retries: 100
+  delay: 5
+  become: yes
+  with_items:
+    - "{{ guest }}"
+
+- name: Start up the new VM(s)
+  virt:
+    name: "{{item.name}}"
+    state: running
+  # when: vmstate.status.find("shutdown") != -1
+  with_items:
+    - "{{ guest }}"
+
+- name: Add new VM(s) to in-memory inventory
+  add_host:
+    name: "{{item.name}}"
+    groups: newvms
+  with_items:
+    - "{{ guest }}"

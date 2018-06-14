@@ -1,0 +1,19 @@
+guest:
+  - name: testvm1.bhirsch.io
+    cpu: 1
+    mem: 2028
+    iso: /home/isos/rhel-server-7.4-x86_64-dvd.iso
+    os:
+      type: Linux
+      variant: rhel7
+    disk:
+      size: 10
+  - name: testvm2.bhirsch.io
+    cpu: 2
+    mem: 2048
+    iso: /home/isos/rhel-server-7.4-x86_64-dvd.iso
+    os:
+      type: Linux
+      variant: rhel7
+    disk:
+      size: 10

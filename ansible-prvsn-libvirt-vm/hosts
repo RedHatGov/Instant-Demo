@@ -1,0 +1,2 @@
+[kvm]
+localhost	ansible-connection=local

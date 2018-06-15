@@ -1,8 +1,15 @@
 ---
 - name: Provision libvirt VMs
   hosts: localhost
-  connection: local 
+  connection: local
   become: true
 
   roles:
     - ansible-prvsn-libvirt-vm
+
+- name: Register new VMs and enable repos
+  hosts: newvms
+  become: true
+
+  roles:
+    - ansible-rhsm

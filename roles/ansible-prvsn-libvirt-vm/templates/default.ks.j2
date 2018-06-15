@@ -22,7 +22,7 @@ network --hostname={{ item.name }}
 # Root password
 rootpw --iscrypted $6$Padt/fVCoDX8mHi9$q58Sqb4cOPS28M7jHUuflDybjaCr2II1xGfCrUwYuT5bETdGCfdHnRlQcwUVhqVpTBNpILkxSGHXYyDCYgQvD1
 # Create user account
-user --name=ansibleops --groups=wheel --iscrypted --password=$6$Padt/fVCoDX8mHi9$q58Sqb4cOPS28M7jHUuflDybjaCr2II1xGfCrUwYuT5bETdGCfdHnRlQcwUVhqVpTBNpILkxSGHXYyDCYgQvD1
+user --name={{ item.username }} --groups=wheel --iscrypted --password=$6$/GXRzCr0w3nep.L2$P39CMu1rzXyLKBEsWtSkMkvtuLE5Gbp8AsFX790mwHt68SvqPPVu1F/UnrVjZOf13c3ihH7G5..5q7C2YTK7q0
 # System services
 services --enabled="chronyd"
 # System timezone

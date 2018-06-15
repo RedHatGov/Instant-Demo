@@ -25,21 +25,21 @@
 - name: create vm
   command: >
     virt-install
-    -n {{item.name}}
+    -n {{ item.name }}
     -r {{ item.mem }}
     --vcpus {{ item.cpu }}
     --location {{ item.iso }}
     --os-type {{ item.os.type }}
     --os-variant {{ item.os.variant }}
     --network network=default
-    --disk size={{item.disk.size}}
+    --disk size={{ item.disk.size }}
     --noautoconsole
     --nographics
     --extra-args="ks=http://{{kvm_host}}/{{item.name}}.ks console=tty0 console=ttyS0,115200n8"
   with_items: "{{ guest }}"
 
 - name:  Wait for new VM to complete building
-  action: virt name={{item.name}} command=status
+  action: virt name={{ item.name }} command=status
   register: vmstate
   until: vmstate.status.find("shutdown") != -1
   retries: 100
@@ -50,15 +50,25 @@
 
 - name: Start up the new VM(s)
   virt:
-    name: "{{item.name}}"
+    name: "{{ item.name }}"
     state: running
   # when: vmstate.status.find("shutdown") != -1
   with_items:
     - "{{ guest }}"
 
+- name: Wait for SSH to come up
+  wait_for:
+    host: "{{ item.name }}"
+    port: 22
+    delay: 60
+    timeout: 320
+    state: started
+  with_items: "{{ guest }}"
+  delegate_to: localhost
+
 - name: Add new VM(s) to in-memory inventory
   add_host:
-    name: "{{item.name}}"
+    name: "{{ item.name }}"
     groups: newvms
   with_items:
     - "{{ guest }}"

@@ -9,8 +9,9 @@ Requirements
 ------------
 
 * Create a custom variables file
-* Customize the supplied `default.ks.j2` template to include your own specifications
-* Modify the encrypted passwords in the kickstart template. (See password encryption example in this README)
+* Customize the supplied `default.ks.j2` template to include your own specifications.
+* Kickstart automatically adds the user account `<username>` to new VMs
+* Modify the encrypted passwords in the kickstart template for the `root` and `username` accounts. (See password encryption example in this README)
 * Download ISO media for the base image
 
 Role Variables
@@ -23,6 +24,7 @@ Role Variables
 
 ```guest:
   - name: <name of your virtual machine>
+    username: <account you want added to new vm>
     cpu: <# of cpus>
     mem: <amount of memory>
     iso: <path to downloaded iso>
@@ -43,9 +45,20 @@ Example Playbook
 
 Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
 
-    - hosts: servers
+    - hosts: localhost
+      connection: local
+      remote_user: ansibleops
+      become: true
+
       roles:
-         - { role: username.rolename, x: 42 }
+         - ansible-prvsn-libvirt-vm
+
+Password Encryption Example
+---------------------------
+```
+# python -c 'import crypt,getpass;pw=getpass.getpass();print(crypt.crypt(pw) if (pw==getpass.getpass("Confirm: ")) else exit())'
+```
+
 
 License
 -------
@@ -54,5 +67,8 @@ BSD
 
 Author Information
 ------------------
+Bill Hirsch
+
+github: bhirsch70
 
 An optional section for the role authors to include contact information, or a website (HTML is not allowed).

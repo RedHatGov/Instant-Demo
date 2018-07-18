@@ -22,3 +22,4 @@
 
   roles:
     - ansible-rhsm
+    - redhataccess.redhat-access-insights-client

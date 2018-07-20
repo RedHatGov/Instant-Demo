@@ -22,13 +22,23 @@ rhsm_org_id
 rhsm_pool
 rhsm_user
 rhsm_password
+product
 ```
 
-Dependencies
-------------
-
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
-
+Example custom_vars.yml file
+----------------------------
+NOTE:  rhsm_activation + rhsm_org_id is mutually exclusive of rhsm_user + rhsm_password
+```
+---
+rhsm_activation_key: my_activation_key
+rhsm_org_id: 1234567
+rhsm_pool: 028390438209823048239
+rhsm_user:
+rhsm_password:
+# Define category of repos you want to enable.  Valid values include:
+# rhel, ocp, satellite, cfme, gluster.  (rhel will also be included)
+product: gluster
+```
 Example Playbook
 ----------------
 
@@ -40,18 +50,6 @@ Including an example of how to use your role (for instance, with variables passe
 
       roles:
          - ansible-rhsm
-```
-
-Example custom_vars.yml file
--------
-NOTE:  rhsm_activation + rhsm_org_id is mutually exclusive of rhsm_user + rhsm_password
-```
----
-rhsm_activation_key: my_activation_key
-rhsm_org_id: 1234567
-rhsm_pool: 028390438209823048239
-rhsm_user:
-rhsm_password:
 ```
 
 License

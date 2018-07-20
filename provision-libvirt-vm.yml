@@ -22,4 +22,5 @@
 
   roles:
     - ansible-rhsm
-    - redhataccess.redhat-access-insights-client
+    - role: redhataccess.redhat-access-insights-client
+      insights_display_name: "{{ inventory_hostname }}"

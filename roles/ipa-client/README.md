@@ -20,7 +20,7 @@ To stay secure, use `ansible-vault` to encrypt your `ipa_password`
 |ipa_server_ip:|IP of your idM/IPA server| 192.168.100.254|
 |ipa_domain:|Your domain| example.io|
 |ipa_principal:|idM account enabled for adminstrative rights| admin|
-|ipa_passwd:|ipa_principle password| some encrypted string |
+|ipa_passwd:|ipa_principal password| some encrypted string |
 
 
 Dependencies

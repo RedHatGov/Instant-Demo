@@ -1,0 +1,32 @@
+---
+# tasks file for ipa-client
+- name: Install ipa-client packages
+  yum:
+    name: ipa-client
+    state: present
+
+- name: Install firewalld service for ipa-server
+  copy:
+    remote_src: no
+    src: ipa-client.xml
+    dest: /etc/firewalld/services/ipa-client.xml
+    owner: root
+    group: root
+    mode: 0664
+
+- name: Reload firewalld
+  command: firewall-cmd --reload
+
+- name: Add ipa server to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: '{{ ipa_server_ip }} {{ ipa_server }}'
+
+- name: Add ipa server as DNS nameserver
+  lineinfile:
+    path: /etc/resolv.conf
+    regexp: '^nameserver'
+    line: 'nameserver {{ ipa_server_ip }}'
+
+- name: Configure ipa client
+  command: ipa-client-install --enable-dns-updates --ssh-trust-dns --mkhomedir --no-ntp --server={{ ipa_server }} --domain={{ ipa_domain }} --principal={{ ipa_principal }} --password={{ ipa_passwd }} -U --force

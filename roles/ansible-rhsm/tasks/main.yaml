@@ -50,3 +50,9 @@
   with_items:
     - "{{repos.cfme}}"
   when: product == "cfme"
+
+- name: Enable Gluster repositories when product == gluster
+  command: "subscription-manager repos --enable {{ item }}"
+  with_items:
+    - "{{repos.gluster}}"
+  when: product == "gluster"

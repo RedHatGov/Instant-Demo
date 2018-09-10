@@ -1,20 +1,20 @@
 ---
-- name: Provision libvirt VMs
-  hosts: localhost
-  connection: local
-  become: true
-
-  roles:
-    - ansible-prvsn-libvirt-vm
-
-- name: Install ssh authorized_key on new VMs
-  hosts: newvms
-  tasks:
-    - authorized_key:
-        user: "{{ item.username }}"
-        state: present
-        key: "{{ lookup('file', '/home/{{item.username}}/.ssh/id_rsa.pub') }}"
-      with_items: "{{ guest }}"
+# - name: Provision libvirt VMs
+#   hosts: localhost
+#   connection: local
+#   become: true
+#
+#   roles:
+#     - ansible-prvsn-libvirt-vm
+#
+# - name: Install ssh authorized_key on new VMs
+#   hosts: newvms
+#   tasks:
+#     - authorized_key:
+#         user: "{{ item.username }}"
+#         state: present
+#         key: "{{ lookup('file', '/home/{{item.username}}/.ssh/id_rsa.pub') }}"
+#       with_items: "{{ guest }}"
 
 - name: Register new VMs and enable repos
   hosts: newvms

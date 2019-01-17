@@ -66,9 +66,21 @@
   with_items: "{{ guest }}"
   delegate_to: localhost
 
+- name: Add a local disk for persistent volumes - (ocp guests)
+  command: qemu-img create -f qcow2 {{image_home}}/{{ item.name }}.pvdisk.qcow2 60G
+  with_items:
+    - "{{ guest }}"
+  when: pattern == "ocp"
+
+- name: Attach local disk for persistent volumes - (ocp guests)
+  command: virsh attach-disk {{item.name}} {{image_home}}/{{item.name}}.pvdisk.qcow2 vdb --cache none
+  with_items:
+    - "{{ guest }}"
+  when: pattern == "ocp"
+
 - name: Add new VM(s) to in-memory inventory
   add_host:
     name: "{{ item.name }}"
-    groups: newvms
+    groups: newhost
   with_items:
     - "{{ guest }}"

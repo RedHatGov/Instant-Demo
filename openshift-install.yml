@@ -1,0 +1,3 @@
+---
+- import_playbook: /tmp/openshift-ansible/playbooks/prerequisites.yml
+- import_playbook: /tmp/openshift-ansible/playbooks/deploy_cluster.yml

@@ -1,0 +1,21 @@
+# Options for the ansible-prvsn-libvirt-vm role
+# Define VM builds and options
+guest:
+  - name: ocp11-master.example.com
+    username: someuseraccount
+    cpu: 4
+    mem: 16384
+    iso: <path to iso>/rhel-server-7.5-x86_64-dvd.iso
+    os:
+      type: Linux
+      variant: rhel7
+    disk:
+      size: 60
+
+# Variables for the ansible-rhsm role
+rhsm_activation_key: empsku_ak
+rhsm_org_id: 12345678
+rhsm_pool: 8b85v98b65fe87e20660ff2d176e068f
+# Define category of repos you want to enable.  Valid values include:
+# rhel, ocp, satellite, cfme, gluster.  (rhel will also be included)
+product: ocp

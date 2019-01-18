@@ -15,8 +15,8 @@ then
   exit 1
 fi
 
-# echo -e "\e[1mConfiguring OpenShift prerequisites..."
-# ansible-playbook openshift-prep.yml -i /home/bhirsch/projects/Instant-Demo/hosts -e @${CUSTOMVARS} -k -K
+echo -e "\e[1mConfiguring OpenShift prerequisites..."
+ansible-playbook openshift-prep.yml -e @${CUSTOMVARS} -k -K
 
 echo -e "\e[1mChecking readiness of OpenShift cluster and performing the installation..."
 ansible-playbook -i /tmp/openshift.hosts openshift-install.yml -e oreg_auth_user=$RHUID -e oreg_auth_password=$RHPASS -k

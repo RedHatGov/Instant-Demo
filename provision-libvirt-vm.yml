@@ -8,7 +8,7 @@
     - ansible-prvsn-libvirt-vm
 
 - name: Install ssh authorized_key on new VMs
-  hosts: newvms
+  hosts: newhost
   tasks:
     - authorized_key:
         user: "{{ item.username }}"

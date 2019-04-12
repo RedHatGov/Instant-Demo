@@ -70,13 +70,13 @@
   command: qemu-img create -f qcow2 {{image_home}}/{{ item.name }}.pvdisk.qcow2 60G
   with_items:
     - "{{ guest }}"
-  when: pattern == "ocp"
+  when: product == "ocp"
 
 - name: Attach local disk for persistent volumes - (ocp guests)
-  command: virsh attach-disk {{item.name}} {{image_home}}/{{item.name}}.pvdisk.qcow2 vdb --cache none
+  command: virsh attach-disk {{item.name}} {{image_home}}/{{item.name}}.pvdisk.qcow2 vdb --driver qemu --subdriver qcow2 --targetbus virtio
   with_items:
     - "{{ guest }}"
-  when: pattern == "ocp"
+  when: product == "ocp"
 
 - name: Add new VM(s) to in-memory inventory
   add_host:

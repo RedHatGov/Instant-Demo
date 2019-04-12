@@ -46,7 +46,6 @@
   parted:
     device: /dev/vdb
     number: 1
-    size: 55GiB
     state: present
 
 - name: Create a volume group on top of /dev/vdb
@@ -54,7 +53,7 @@
     vg: vg_ocp
     pvs: /dev/vdb
 
-- name: Create a LVM LV on the device that uses the all space.
+- name: Create a LVM LV on the device
   lvol:
     vg: vg_ocp
     lv: lv_ocp
@@ -72,6 +71,7 @@
     owner: root
     group: root
     mode: 01744
+    state: directory
 
 - name: Mount the device.
   mount:
@@ -80,3 +80,6 @@
     fstype: xfs
     opts: noatime,nodiratime
     state: mounted
+
+- name: Ensure container access to mount point
+  command: chcon -R unconfined_u:object_r:svirt_sandbox_file_t:s0 /ocp_pvs

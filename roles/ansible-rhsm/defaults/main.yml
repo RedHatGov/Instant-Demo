@@ -1,5 +1,5 @@
 versions:
-  satellite: 6.3
+  satellite: 6.4
   ocp: 3.11
   cfme: 5.9
   gluster: 3

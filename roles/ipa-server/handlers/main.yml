@@ -1,0 +1,6 @@
+---
+# handlers file for ipa-server
+- name: reload firewalld
+  service:
+    name: firewalld
+    state: reloaded

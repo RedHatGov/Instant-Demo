@@ -1,0 +1,28 @@
+---
+# tasks file for ipa-server
+- name: Install ipa-server packages
+  yum:
+    name:
+      - ipa-server
+      - ipa-server-dns
+    state: present
+
+- name: Run ipa-server-install configuration
+  command: ipa-server-install -U -n {{ domain }} -r {{ realm }} -p {{ dm_pass }} -a {{ a_pass }} --hostname {{ ansible_fqdn }}
+
+- name: Install idm.xml firewalld service
+  template:
+    src: files/idm.xml
+    dest: /etc/firewalld/services/idm.xml
+    owner: root
+    group: root
+    mode: 0664
+  notify: reload firewalld
+
+- name: Enable idm in the firewall
+  firewalld:
+    service: idm
+    state: enabled
+    permanent: yes
+    immediate: yes
+  notify: reload firewalld

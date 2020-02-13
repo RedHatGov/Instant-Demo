@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>Red Hat Identity Management Server (IdM)</short>
+  <description>IdM is an LDAP and Kerberos domain controller for Linux systems</description>
+  <port protocol="tcp" port="80"/>
+  <port protocol="tcp" port="443"/>
+  <port protocol="tcp" port="88"/>
+  <port protocol="tcp" port="464"/>
+  <port protocol="tcp" port="389"/>
+  <port protocol="tcp" port="636"/>
+  <port protocol="tcp" port="53"/>
+  <port protocol="udp" port="88"/>
+  <port protocol="udp" port="464"/>
+  <port protocol="udp" port="53"/>
+  <port protocol="udp" port="123"/>
+</service>
